@@ -1,0 +1,82 @@
+provider "aws" {
+  region = "us-west-2"  # Adjust the region as needed
+}
+
+resource "aws_db_instance" "mssql" {
+  identifier         = "mssql-instance"
+  engine             = "sqlserver-ex"
+  instance_class     = "db.t3.medium"
+  allocated_storage  = 20
+  name               = "master"  # Default to master as we'll create jiradb later
+  username           = "admin"
+  password           = "admin123"
+  parameter_group_name = "default.sqlserver-ex-13.0"
+  
+  skip_final_snapshot = true
+  publicly_accessible = true
+
+  tags = {
+    Name = "MSSQLInstance"
+  }
+}
+
+resource "null_resource" "db_initial_setup" {
+  depends_on = [aws_db_instance.mssql]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      sqlcmd -S ${aws_db_instance.mssql.address} -U admin -P admin123 -Q "
+        CREATE DATABASE jiradb COLLATE SQL_Latin1_General_CP1_CS_AS;
+        USE jiradb;
+        CREATE LOGIN jira WITH PASSWORD = 'jira122';
+        CREATE USER jira FOR LOGIN jira;
+        ALTER ROLE db_owner ADD MEMBER jira;
+        ALTER DATABASE jiradb SET ALLOW_SNAPSHOT_ISOLATION ON;
+        ALTER DATABASE jiradb SET DATE_CORRELATION_OPTIMIZATION ON;
+        ALTER DATABASE jiradb SET READ_COMMITTED_SNAPSHOT ON;
+        ALTER DATABASE jiradb SET CURSOR_CLOSE_ON_COMMIT ON;
+      "
+    EOT
+  }
+}
+
+#####
+
+#!/bin/bash
+
+# Variables
+DB_HOST="your-rds-endpoint"  # Replace with your RDS endpoint
+DB_PORT=1433
+ADMIN_USER="admin"
+ADMIN_PASSWORD="admin123"
+JIRA_DB="jiradb"
+JIRA_USER="jira"
+JIRA_PASSWORD="jira122"
+
+# SQL Commands
+SQL_COMMANDS=$(cat <<EOF
+CREATE DATABASE $JIRA_DB COLLATE SQL_Latin1_General_CP1_CS_AS;
+USE $JIRA_DB;
+CREATE LOGIN $JIRA_USER WITH PASSWORD = '$JIRA_PASSWORD';
+CREATE USER $JIRA_USER FOR LOGIN $JIRA_USER;
+ALTER ROLE db_owner ADD MEMBER $JIRA_USER;
+ALTER DATABASE $JIRA_DB SET ALLOW_SNAPSHOT_ISOLATION ON;
+ALTER DATABASE $JIRA_DB SET DATE_CORRELATION_OPTIMIZATION ON;
+ALTER DATABASE $JIRA_DB SET READ_COMMITTED_SNAPSHOT ON;
+ALTER DATABASE $JIRA_DB SET CURSOR_CLOSE_ON_COMMIT ON;
+EOF
+)
+
+# Run SQL Commands
+sqlcmd -S $DB_HOST,$DB_PORT -U $ADMIN_USER -P $ADMIN_PASSWORD -Q "$SQL_COMMANDS"
+
+# Check for Errors
+if [ $? -eq 0 ]; then
+    echo "Database and user created successfully with the specified settings."
+else
+    echo "An error occurred while creating the database and user."
+fi
+
+
+
+
