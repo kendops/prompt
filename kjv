@@ -1,0 +1,41 @@
+from jira import JIRA
+
+# Jira server details
+jira_server = 'https://your-jira-server.com'
+admin_username = 'your-admin-username'
+admin_password = 'your-admin-password'
+
+# New user details
+new_user_email = 'solomon.williams@example.com'
+new_user_display_name = 'Solomon Williams'
+new_user_username = 'solomonwilliams'  # Only for Jira Server
+new_user_password = 'SecurePassword123'
+
+# Connect to Jira server
+jira = JIRA(server=jira_server, basic_auth=(admin_username, admin_password))
+
+# Define the user creation data
+user_data = {
+    'emailAddress': new_user_email,
+    'displayName': new_user_display_name,
+    'password': new_user_password
+}
+
+# For Jira Server (Data Center), include the username
+if jira._options['server'].endswith('/jira'):
+    user_data['name'] = new_user_username
+
+# Create the user
+try:
+    user = jira.create_user(**user_data)
+    print(f"User '{new_user_display_name}' created successfully.")
+except Exception as e:
+    print(f"Failed to create user: {e}")
+
+# Assign user to admin group
+admin_group = 'jira-administrators'  # The name of the admin group may vary; check your Jira instance
+try:
+    jira.add_user_to_group(username=new_user_username, groupname=admin_group)
+    print(f"User '{new_user_display_name}' added to '{admin_group}' group successfully.")
+except Exception as e:
+    print(f"Failed to add user to admin group: {e}")
